@@ -1,3 +1,4 @@
+import argparse
 import math
 import torch
 import random
@@ -34,39 +35,43 @@ def makeMaxBatches(num_samples, batch_size, min_serial=1, max_serial=1000, noise
 
 if __name__ == "__main__":
 
-    # Number of "samples" observed from which the maximum number will be predicted.
-    number_samples = 10
-    if 1 < len(sys.argv):
-        number_samples = int(sys.argv[1])
+    parser = argparse.ArgumentParser(description="Demonstrate some NN stuff.")
+    parser.add_argument(
+        "--number_samples",
+        "-n",
+        help="The number of samples observed from which the maximum is predicted.",
+        type=int,
+        default=10)
+    parser.add_argument(
+        "--eval_size",
+        help="The number of tests to use when computer final statistics.",
+        type=int,
+        default=100)
+    parser.add_argument(
+        "--total_batches",
+        help="The total number of batches during training.",
+        type=int,
+        default=3000)
+    parser.add_argument(
+        "--batch_size",
+        help="The size of each batch. Tiny networks, so use a large batch size.",
+        type=int,
+        default=1024)
+    parser.add_argument(
+        "--noise_magnitude",
+        help="Add +/- this value to all correct answers.",
+        type=int,
+        default=0)
 
-    # Number of tests to use when computing final performance statistics.
-    final_evaluation_size = 100
-    if 2 < len(sys.argv):
-        final_evaluation_size = int(sys.argv[2])
+    args = parser.parse_args()
 
-    # Total number of batches to train
-    total_batches = 3000
-    if 3 < len(sys.argv):
-        total_batches = int(sys.argv[3])
-
-    # Size of the batches. The networks are tiny, so use a big batch size.
-    batch_size = 1024
-    if 4 < len(sys.argv):
-        batch_size = int(sys.argv[4])
-
-    # Noise +/- this value will be added to the correct answers.
-    noise_magnitude = 0
-    if 5 < len(sys.argv):
-        noise_magnitude = int(sys.argv[5])
-
-
-    maxnet = MaxNetwork(num_inputs=number_samples).cuda()
+    maxnet = MaxNetwork(num_inputs=args.number_samples).cuda()
     maxnet.train()
     max_optimizer = torch.optim.SGD(maxnet.parameters(), lr=10e-7)
 
-    solvednet = MaxNetwork(num_inputs=number_samples).cuda()
+    solvednet = MaxNetwork(num_inputs=args.number_samples).cuda()
     solvednet.train()
-    presolve(solvednet, number_samples)
+    presolve(solvednet, args.number_samples)
     solved_optimizer = torch.optim.SGD(solvednet.parameters(), lr=10e-7)
 
     loss_fn = torch.nn.L1Loss()
@@ -74,11 +79,11 @@ if __name__ == "__main__":
     # Now train each of the networks. This will be the maximum N.
     max_number = 1500
 
-    for batch_num in range(1, total_batches + 1):
+    for batch_num in range(1, args.total_batches + 1):
 
         observations, answers = makeMaxBatches(
-            num_samples=number_samples, batch_size=batch_size, min_serial=number_samples,
-            max_serial=max_number, noise_magnitude=noise_magnitude)
+            num_samples=args.number_samples, batch_size=args.batch_size, min_serial=args.number_samples,
+            max_serial=max_number, noise_magnitude=args.noise_magnitude)
 
         # Train each of the networks
         reg_loss = train_step(maxnet, observations, loss_fn, answers, max_optimizer, print_grad=False)
@@ -90,12 +95,11 @@ if __name__ == "__main__":
 
 
     # Now evaluate
-    batch_size = final_evaluation_size
     maxnet.eval()
     solvednet.eval()
     observations, answers = makeMaxBatches(
-        num_samples=number_samples, min_serial=number_samples, batch_size=batch_size,
-        noise_magnitude=noise_magnitude)
+        num_samples=args.number_samples, min_serial=args.number_samples, batch_size=args.eval_size,
+        noise_magnitude=args.noise_magnitude)
 
     reg_out = maxnet.forward(observations)
     solved_out = solvednet.forward(observations)
@@ -110,5 +114,5 @@ if __name__ == "__main__":
         errors[1].append(abs(answers[i].item() - solved_out[i,0].item()))
 
     print("Average absolute errors are:")
-    print(f"\tRegular Network: {sum(errors[0])/batch_size}")
-    print(f"\tSolved Network: {sum(errors[1])/batch_size}")
+    print(f"\tRegular Network: {sum(errors[0])/args.eval_size}")
+    print(f"\tSolved Network: {sum(errors[1])/args.eval_size}")

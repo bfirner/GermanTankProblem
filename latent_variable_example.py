@@ -1,3 +1,4 @@
+import argparse
 import math
 import torch
 import random
@@ -37,39 +38,44 @@ def makeSerials(num_samples, batch_size, min_serial=1, max_serial=1000):
 
 if __name__ == "__main__":
 
-    # Number of "samples" observed from which the maximum number will be predicted.
-    number_samples = 10
-    if 1 < len(sys.argv):
-        number_samples = int(sys.argv[1])
+    parser = argparse.ArgumentParser(description="Demonstrate some NN stuff.")
+    parser.add_argument(
+        "--number_samples",
+        "-n",
+        help="The number of samples observed from which the maximum is predicted.",
+        type=int,
+        default=10)
+    parser.add_argument(
+        "--eval_size",
+        help="The number of tests to use when computer final statistics.",
+        type=int,
+        default=100)
+    parser.add_argument(
+        "--total_batches",
+        help="The total number of batches during training.",
+        type=int,
+        default=3000)
+    parser.add_argument(
+        "--batch_size",
+        help="The size of each batch. Tiny networks, so use a large batch size.",
+        type=int,
+        default=1024)
 
-    # Number of tests to use when computing final performance statistics.
-    final_evaluation_size = 100
-    if 2 < len(sys.argv):
-        final_evaluation_size = int(sys.argv[2])
-
-    # Total number of batches to train
-    total_batches = 3000
-    if 3 < len(sys.argv):
-        total_batches = int(sys.argv[3])
-
-    # Size of the batches. The networks are tiny, so use a big batch size.
-    batch_size = 1024
-    if 4 < len(sys.argv):
-        batch_size = int(sys.argv[4])
+    args = parser.parse_args()
 
 
-    regnet = RegularNet(num_inputs=number_samples, num_outputs=1).cuda()
+    regnet = RegularNet(num_inputs=args.number_samples, num_outputs=1).cuda()
     regnet.train()
     #reg_optimizer = torch.optim.Adam(regnet.parameters())
     reg_optimizer = torch.optim.SGD(regnet.parameters(), lr=10e-7)
 
-    solvednet = RegularNet(num_inputs=number_samples, num_outputs=1).cuda()
+    solvednet = RegularNet(num_inputs=args.number_samples, num_outputs=1).cuda()
     solvednet.train()
-    presolve(solvednet, number_samples, freeze_layers=[2, 4, 5]) # TODO Look at the gradients for layers 0 and 2
+    presolve(solvednet, args.number_samples, freeze_layers=[2, 4, 5]) # TODO Look at the gradients for layers 0 and 2
     solved_optimizer = torch.optim.SGD(solvednet.parameters(), lr=10e-7)
 
     latent_inputs=5
-    latnet = LatentNet(num_inputs=number_samples, num_outputs=1, latent_size=latent_inputs).cuda()
+    latnet = LatentNet(num_inputs=args.number_samples, num_outputs=1, latent_size=latent_inputs).cuda()
     latnet.train()
     #lat_optimizer = torch.optim.Adam(latnet.parameters())
     lat_optimizer = torch.optim.SGD(latnet.parameters(), lr=10e-6)
@@ -80,13 +86,13 @@ if __name__ == "__main__":
     max_number = 1500
 
     true_latent_sample_rate = 1.0
-    for batch_num in range(1, total_batches + 1):
+    for batch_num in range(1, args.total_batches + 1):
         # Does a bootstrapping period help the latent training? Not really.
-        if math.floor(total_batches/10) == batch_num:
+        if math.floor(args.total_batches/10) == batch_num:
             true_latent_sample_rate = 0.8
-        if math.floor(total_batches/4)== batch_num:
+        if math.floor(args.total_batches/4)== batch_num:
             true_latent_sample_rate = 0.5
-        if total_batches - 500 == batch_num:
+        if args.total_batches - 500 == batch_num:
             true_latent_sample_rate = 0.1
 
         if 500 == batch_num:
@@ -94,7 +100,7 @@ if __name__ == "__main__":
             lat_optimizer = torch.optim.SGD(latnet.parameters(), lr=10e-7)
 
         observations, answers = makeSerials(
-            num_samples=number_samples, batch_size=batch_size, min_serial=number_samples,
+            num_samples=args.number_samples, batch_size=args.batch_size, min_serial=args.number_samples,
             max_serial=max_number)
 
         # Train each of the networks
@@ -111,12 +117,11 @@ if __name__ == "__main__":
 
 
     # Now evaluate
-    batch_size = final_evaluation_size
     regnet.eval()
     solvednet.eval()
     latnet.eval()
     observations, answers = makeSerials(
-        num_samples=number_samples, min_serial=number_samples, batch_size=batch_size)
+        num_samples=args.number_samples, min_serial=args.number_samples, batch_size=args.eval_size)
 
     reg_out = regnet.forward(observations)
     solved_out = solvednet.forward(observations)
@@ -137,11 +142,11 @@ if __name__ == "__main__":
         errors[4].append(abs(answers[i].item() - solved_out[i,0].item()))
 
     print("Average absolute errors are:")
-    print(f"\tBayes: {sum(errors[0])/batch_size}")
-    print(f"\tFrequentist: {sum(errors[1])/batch_size}")
-    print(f"\tRegular Network: {sum(errors[2])/batch_size}")
-    print(f"\tLatent Network: {sum(errors[3])/batch_size}")
-    print(f"\tSolved Network: {sum(errors[4])/batch_size}")
+    print(f"\tBayes: {sum(errors[0])/args.eval_size}")
+    print(f"\tFrequentist: {sum(errors[1])/args.eval_size}")
+    print(f"\tRegular Network: {sum(errors[2])/args.eval_size}")
+    print(f"\tLatent Network: {sum(errors[3])/args.eval_size}")
+    print(f"\tSolved Network: {sum(errors[4])/args.eval_size}")
     # Maximum errors are interesting, but are a bit biased by outliers.
     #print("Maximum absolute errors are:")
     #print(f"\tBayes: {max(errors[0])}")
