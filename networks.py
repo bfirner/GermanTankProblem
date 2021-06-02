@@ -46,9 +46,9 @@ class MaxNetwork(RegularNet):
         # Only return the first element of the next to last layer.
         return x[:,0:1]
 
-def presolve(network, num_inputs, freeze_layers = []):
+def presolve(network, num_inputs, freeze_layers = [4, 5]):
     """Set the weights of a RegularNet to the frequentist approach.
-    
+
     Arguments:
         network (RegularNet) : Instance of RegularNet to presolve
         num_inputs (int)     : The number of inputs to the network
@@ -160,6 +160,8 @@ def train_step(net, batch, loss_fn, labels, optimizer, print_grad = False):
     loss = loss_fn(out, labels)
     loss.backward()
     if print_grad:
+        print("Inputs:")
+        print(f"\t{batch}")
         print("Outputs:")
         print(f"\tDesired output {labels}")
         print(f"\tActual output {out}")
@@ -169,6 +171,7 @@ def train_step(net, batch, loss_fn, labels, optimizer, print_grad = False):
         print(f"\tLayer 2 weight: {net.net[0].weight.grad}")
         print(f"\tLayer 2 bias: {net.net[0].bias.grad}")
     optimizer.step()
+    optimizer.zero_grad()
     return loss.detach()
 
 def latent_train_step(net, batch, loss_fn, labels, optimizer, true_prob=0.5):
@@ -207,4 +210,5 @@ def latent_train_step(net, batch, loss_fn, labels, optimizer, true_prob=0.5):
     loss = loss_fn(out, labels) + loss_fn(latent, desired_latent) * labels.max()/latent.size(1)
     loss.backward()
     optimizer.step()
+    optimizer.zero_grad()
     return loss.detach()

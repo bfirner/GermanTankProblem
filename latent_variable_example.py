@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
     solvednet = RegularNet(num_inputs=args.number_samples, num_outputs=1).cuda()
     solvednet.train()
-    presolve(solvednet, args.number_samples, freeze_layers=[2, 4, 5]) # TODO Look at the gradients for layers 0 and 2
+    presolve(solvednet, args.number_samples, freeze_layers=[]) # TODO Look at the gradients for layers 0 and 2
     solved_optimizer = torch.optim.SGD(solvednet.parameters(), lr=10e-7)
 
     latent_inputs=5
