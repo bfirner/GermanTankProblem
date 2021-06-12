@@ -5,6 +5,7 @@ import random
 import sys
 
 from networks import (
+    BistateMaxNet,
     MaxNetwork,
     presolve,
     train_step
@@ -67,12 +68,16 @@ if __name__ == "__main__":
 
     maxnet = MaxNetwork(num_inputs=args.number_samples).cuda()
     maxnet.train()
-    max_optimizer = torch.optim.SGD(maxnet.parameters(), lr=10e-7)
+    max_optimizer = torch.optim.SGD(maxnet.parameters(), lr=10e-5)
 
     solvednet = MaxNetwork(num_inputs=args.number_samples).cuda()
     solvednet.train()
     presolve(solvednet, args.number_samples)
     solved_optimizer = torch.optim.SGD(solvednet.parameters(), lr=10e-7)
+
+    bimaxnet = BistateMaxNet(num_inputs=args.number_samples).cuda()
+    bimaxnet.train()
+    bimax_optimizer = torch.optim.SGD(bimaxnet.parameters(), lr=10e-5)
 
     loss_fn = torch.nn.L1Loss()
 
@@ -88,31 +93,36 @@ if __name__ == "__main__":
         # Train each of the networks
         reg_loss = train_step(maxnet, observations, loss_fn, answers, max_optimizer, print_grad=False)
         solved_loss = train_step(solvednet, observations, loss_fn, answers, solved_optimizer, print_grad=False)
+        bistate_loss = train_step(bimaxnet, observations, loss_fn, answers, bimax_optimizer, print_grad=False)
 
         # Only useful for debugging.
         if 0 == batch_num%500:
-            print(f"Batch {batch_num} loss - maxnet:{reg_loss}, solved:{solved_loss}")
+            print(f"Batch {batch_num} loss - maxnet:{reg_loss}, solved:{solved_loss}, bistate:{bistate_loss}")
 
 
     # Now evaluate
     maxnet.eval()
     solvednet.eval()
+    bimaxnet.eval()
     observations, answers = makeMaxBatches(
         num_samples=args.number_samples, min_serial=args.number_samples, batch_size=args.eval_size,
         noise_magnitude=args.noise_magnitude)
 
     reg_out = maxnet.forward(observations)
     solved_out = solvednet.forward(observations)
+    bimax_out = bimaxnet.forward(observations)
 
     # Make two empty arrays to store some error statistics
-    errors = [[] for _ in range(2)]
+    errors = [[] for _ in range(3)]
     for i in range(observations.size(0)):
         samples = observations.long().tolist()
 
         # Track errors
         errors[0].append(abs(answers[i].item() - reg_out[i,0].item()))
         errors[1].append(abs(answers[i].item() - solved_out[i,0].item()))
+        errors[2].append(abs(answers[i].item() - bimax_out[i,0].item()))
 
     print("Average absolute errors are:")
     print(f"\tRegular Network: {sum(errors[0])/args.eval_size}")
     print(f"\tSolved Network: {sum(errors[1])/args.eval_size}")
+    print(f"\tBistate Network: {sum(errors[2])/args.eval_size}")
