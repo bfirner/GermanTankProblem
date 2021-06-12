@@ -67,18 +67,19 @@ if __name__ == "__main__":
     regnet = RegularNet(num_inputs=args.number_samples, num_outputs=1).cuda()
     regnet.train()
     #reg_optimizer = torch.optim.Adam(regnet.parameters())
-    reg_optimizer = torch.optim.SGD(regnet.parameters(), lr=10e-7)
+    reg_optimizer = torch.optim.SGD(regnet.parameters(), lr=10e-5)
 
     solvednet = RegularNet(num_inputs=args.number_samples, num_outputs=1).cuda()
     solvednet.train()
     presolve(solvednet, args.number_samples, freeze_layers=[]) # TODO Look at the gradients for layers 0 and 2
+    # Need to keep the learning rate tiny or the training loses the learned solution very quickly.
     solved_optimizer = torch.optim.SGD(solvednet.parameters(), lr=10e-7)
 
     latent_inputs=5
     latnet = LatentNet(num_inputs=args.number_samples, num_outputs=1, latent_size=latent_inputs).cuda()
     latnet.train()
     #lat_optimizer = torch.optim.Adam(latnet.parameters())
-    lat_optimizer = torch.optim.SGD(latnet.parameters(), lr=10e-6)
+    lat_optimizer = torch.optim.SGD(latnet.parameters(), lr=10e-5)
 
     loss_fn = torch.nn.L1Loss()
 
@@ -95,9 +96,9 @@ if __name__ == "__main__":
         if args.total_batches - 500 == batch_num:
             true_latent_sample_rate = 0.1
 
-        if 500 == batch_num:
-            reg_optimizer = torch.optim.SGD(regnet.parameters(), lr=10e-7)
-            lat_optimizer = torch.optim.SGD(latnet.parameters(), lr=10e-7)
+        if 1000 == batch_num:
+            reg_optimizer = torch.optim.SGD(regnet.parameters(), lr=10e-6)
+            lat_optimizer = torch.optim.SGD(latnet.parameters(), lr=10e-6)
 
         observations, answers = makeSerials(
             num_samples=args.number_samples, batch_size=args.batch_size, min_serial=args.number_samples,

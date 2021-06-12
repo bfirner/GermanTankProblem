@@ -155,6 +155,85 @@ class LatentNet(torch.nn.Module):
         x = self.net(x)
         return x
 
+class Bistate(torch.nn.Module):
+    """A bi-state section, where the input is just a value vector and a 'confidence' vector and the
+    output is a value vector along with a 'confidence' vector."""
+
+    def __init__(self, in_features, out_features):
+        super(Bistate, self).__init__()
+
+        self.value = torch.nn.Linear(in_features = in_features, out_features = out_features, bias = True)
+        # No bias for the confidence, that should only be based upon the input
+        self.confidence = torch.nn.Linear(in_features = in_features, out_features = out_features, bias = False)
+        # A softmax will be applied to the incoming confidence values to force them into a sane
+        # range [0,1] and ensure that they sum to 1.
+        self.sm = torch.nn.Softmax(dim=1)
+
+        # TODO FIXME It would also be good to force the certainties to be closer to equal (meaning
+        # don't know) when the overall output is poor, and to force them to being more certain
+        # (meaning a sparse output of high certainties) when the output is of overall high quality.
+        # Maybe something could be done in the upper and lower half of the batch, by loss.
+
+    def forward(self, x):
+        val, conf = x
+        # Multiplication is elementwise. The sum of the confidences after softmax will be 1
+        new_values = val * self.sm(conf)
+        return self.value(new_values), self.confidence(new_values)
+
+class BeginBistate(Bistate):
+    """Begin a bi-state section, where the input is just a value vector and the output is a value
+    vector along with a 'confidence' vector."""
+
+    def __init__(self, in_features, out_features):
+        super(BeginBistate, self).__init__(in_features, out_features)
+
+    def forward(self, x):
+        # Begin state will not receive confidence values.
+        return self.value(x), self.confidence(x)
+
+class EndBistate(Bistate):
+    """A bi-state section, where the input is just a value vector and a 'confidence' vector and the
+    output is a value vector along with a 'confidence' vector."""
+
+    def __init__(self, in_features, out_features):
+        super(EndBistate, self).__init__(in_features, out_features)
+
+    def forward(self, x):
+        val, conf = x
+        new_values = val * self.sm(conf)
+        # End state only returns values, not confidence.
+        return self.value(new_values)
+
+class BistateMaxNet(torch.nn.Module):
+    """Regular network."""
+
+    def __init__(self, num_inputs):
+        """Initialize the demonstration network.
+        """
+        super(BistateMaxNet, self).__init__()
+        layer_sizes = [
+            num_inputs,
+            num_inputs**2,
+            num_inputs**2,
+            num_inputs,
+            1]
+
+        self.net = torch.nn.ModuleList()
+        self.net.append(BeginBistate(in_features = layer_sizes[0], out_features = layer_sizes[1]))
+        for i in range(1, len(layer_sizes)-2):
+            self.net.append(Bistate(in_features = layer_sizes[i], out_features = layer_sizes[i+1]))
+        self.net.append(EndBistate(in_features = layer_sizes[-2], out_features = layer_sizes[-1]))
+
+    def forward(self, x):
+        for layer in self.net:
+            # Only send the data through the ReLU
+            if (type(layer) == torch.nn.ReLU):
+                a, b = x
+                x = layer(a), b
+            else:
+                x = layer(x)
+        return x
+
 def train_step(net, batch, loss_fn, labels, optimizer, print_grad = False):
     out = net.forward(batch)
     loss = loss_fn(out, labels)
